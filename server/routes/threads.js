@@ -12,35 +12,36 @@ const router = Router();
 // Your job: replace the array logic with a real Prisma
 // `where` + `orderBy` so the DATABASE does the filtering.
 // ─────────────────────────────────────────────────────────────
-router.get("/", async (req, res, next) => {
+
+router.get("/", async (req, res) => {
   try {
     const { search, sort } = req.query;
 
-    // Loads EVERY thread into memory, every request. 🚫
-    let threads = await prisma.thread.findMany({
-      include: {
-        author: { select: { name: true, avatarUrl: true } },
-        _count: { select: { comments: true } },
-      },
+    // Build the database search condition
+    const where = search
+      ? {
+          title: {
+            contains: search,
+            mode: "insensitive",
+          },
+        }
+      : {};
+
+    // Build the database sorting condition
+    const orderBy = {
+      createdAt: sort === "oldest" ? "asc" : "desc",
+    };
+
+    // PostgreSQL handles filtering and sorting
+    const threads = await prisma.thread.findMany({
+      where,
+      orderBy,
     });
 
-    // TODO: remove this in-memory filter — build a Prisma `where` instead.
-    if (search) {
-      threads = threads.filter((t) =>
-        t.title.toLowerCase().includes(String(search).toLowerCase())
-      );
-    }
-
-    // TODO: remove this in-memory sort — build a Prisma `orderBy` instead.
-    if (sort === "oldest") {
-      threads.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    } else {
-      threads.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    }
-
-    res.json({ threads });
+    res.json(threads);
   } catch (error) {
-    next(error);
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch threads" });
   }
 });
 
